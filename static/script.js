@@ -163,51 +163,52 @@ function buildEmbed(url, thumb, title) {
 }
 
 /* ─── Copy handler ────────────────────────────────── */
+function stampFeedback(btn, event) {
+  const textEl = btn.querySelector('.btn-text');
+  btn.classList.add('stamped');
+  textEl.textContent = 'STAMPED!';
+  playStampSound();
+  spawnClickSparks(event.clientX, event.clientY);
+  if (sparkSystem) {
+    const rect = btn.getBoundingClientRect();
+    sparkSystem.spawnBurst(rect.left + rect.width / 2, rect.top + rect.height / 2, 18);
+  }
+  setTimeout(() => {
+    btn.classList.remove('stamped');
+    textEl.textContent = 'COPY EMBED';
+  }, 2200);
+}
+
 function handleCopy(btn, event) {
   const { url, thumb, title } = btn.dataset;
-  const embed = buildEmbed(url, thumb, title);
+  const html = buildEmbed(url, thumb, title);
 
-  navigator.clipboard.writeText(embed).then(() => {
-    const textEl = btn.querySelector('.btn-text');
-    const original = textEl.textContent;
-
-    btn.classList.add('stamped');
-    textEl.textContent = 'STAMPED!';
-    playStampSound();
-    spawnClickSparks(event.clientX, event.clientY);
-
-    if (sparkSystem) {
-      const rect = btn.getBoundingClientRect();
-      sparkSystem.spawnBurst(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-        18
-      );
-    }
-
-    setTimeout(() => {
-      btn.classList.remove('stamped');
-      textEl.textContent = original;
-    }, 2200);
-  }).catch(() => {
-    /* fallback for browsers without clipboard API */
+  /* Write rich HTML so email clients paste a rendered clickable image */
+  if (navigator.clipboard && window.ClipboardItem) {
+    const blob = new Blob([html], { type: 'text/html' });
+    navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })])
+      .then(() => stampFeedback(btn, event))
+      .catch(() => {
+        /* fallback for browsers without clipboard API */
+        const ta = document.createElement('textarea');
+        ta.value = html;
+        ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        stampFeedback(btn, event);
+      });
+  } else {
     const ta = document.createElement('textarea');
-    ta.value = buildEmbed(url, thumb, title);
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
+    ta.value = html;
+    ta.style.cssText = 'position:fixed;opacity:0';
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    btn.classList.add('stamped');
-    btn.querySelector('.btn-text').textContent = 'STAMPED!';
-    playStampSound();
-    spawnClickSparks(event.clientX, event.clientY);
-    setTimeout(() => {
-      btn.classList.remove('stamped');
-      btn.querySelector('.btn-text').textContent = 'COPY EMBED';
-    }, 2200);
-  });
+    stampFeedback(btn, event);
+  }
 }
 
 /* ─── Render videos ───────────────────────────────── */

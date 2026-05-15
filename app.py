@@ -85,7 +85,7 @@ def fetch_videos():
 def login():
     error = None
     if request.method == "POST":
-        if request.form.get("password") == APP_PASSWORD:
+        if request.form.get("password", "").strip() == APP_PASSWORD.strip():
             session["authenticated"] = True
             return redirect(url_for("index"))
         error = "Incorrect password."

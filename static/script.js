@@ -1,0 +1,341 @@
+/* ─── Canvas Spark System ──────────────────────────── */
+class SparkSystem {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.particles = [];
+    this.lastScrollY = window.scrollY;
+    this.scrollVelocity = 0;
+    this.resize();
+    this.spawnBase(40);
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('scroll', () => this.onScroll(), { passive: true });
+    this.animate();
+  }
+
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  }
+
+  onScroll() {
+    const dy = Math.abs(window.scrollY - this.lastScrollY);
+    this.lastScrollY = window.scrollY;
+    this.scrollVelocity = Math.min(dy, 60);
+    const count = Math.floor(this.scrollVelocity * 0.6);
+    if (count > 0) this.spawnBase(count);
+  }
+
+  spawnBase(count) {
+    for (let i = 0; i < count; i++) {
+      this.particles.push({
+        x: Math.random() * this.canvas.width,
+        y: this.canvas.height * 0.7 + Math.random() * (this.canvas.height * 0.35),
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: -(Math.random() * 2.2 + 0.4),
+        life: 1,
+        decay: Math.random() * 0.006 + 0.003,
+        size: Math.random() * 2.2 + 0.4,
+        hue: Math.random() * 40 + 15,
+      });
+    }
+  }
+
+  spawnBurst(x, y, count) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 3 + 1;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life: 1,
+        decay: Math.random() * 0.015 + 0.01,
+        size: Math.random() * 3 + 1,
+        hue: Math.random() * 40 + 15,
+      });
+    }
+  }
+
+  update() {
+    this.particles = this.particles.filter(p => p.life > 0.01);
+    for (const p of this.particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy -= 0.01;
+      p.vx += (Math.random() - 0.5) * 0.08;
+      p.life -= p.decay;
+    }
+    if (this.particles.length < 35) this.spawnBase(4);
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    for (const p of this.particles) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(p.life * 0.8, 0.8);
+      const color = `hsl(${p.hue}, 100%, 60%)`;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  animate() {
+    this.update();
+    this.draw();
+    requestAnimationFrame(() => this.animate());
+  }
+}
+
+/* ─── Web Audio Metal Stamp ───────────────────────── */
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (Ctor) audioCtx = new Ctor();
+  }
+  return audioCtx;
+}
+
+function playStampSound() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+
+  const dur = 0.18;
+  const sr = ctx.sampleRate;
+  const buf = ctx.createBuffer(1, Math.floor(sr * dur), sr);
+  const data = buf.getChannelData(0);
+
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sr;
+    const env = Math.exp(-t * 50);
+    const ring = Math.sin(2 * Math.PI * 1800 * t) * 0.3;
+    data[i] = ((Math.random() * 2 - 1) * 0.7 + ring) * env;
+  }
+
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 1200;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.55, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+
+  src.connect(hp);
+  hp.connect(gain);
+  gain.connect(ctx.destination);
+  src.start();
+  src.stop(ctx.currentTime + 0.25);
+}
+
+/* ─── DOM Sparks ──────────────────────────────────── */
+function spawnClickSparks(clientX, clientY) {
+  const layer = document.getElementById('sparks-layer');
+  const count = 14;
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement('div');
+    s.className = 'click-spark';
+    const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const dist = Math.random() * 55 + 20;
+    s.style.left = clientX + 'px';
+    s.style.top = clientY + 'px';
+    s.style.setProperty('--tx', (Math.cos(angle) * dist) + 'px');
+    s.style.setProperty('--ty', (Math.sin(angle) * dist) + 'px');
+    s.style.animationDuration = (Math.random() * 0.2 + 0.4) + 's';
+    layer.appendChild(s);
+    s.addEventListener('animationend', () => s.remove(), { once: true });
+  }
+}
+
+/* ─── Build embed HTML ────────────────────────────── */
+function buildEmbed(url, thumb, title) {
+  return `<a href="${url}"><img src="${thumb}" alt="${title.replace(/"/g, '&quot;')}"></a>`;
+}
+
+/* ─── Copy handler ────────────────────────────────── */
+function handleCopy(btn, event) {
+  const { url, thumb, title } = btn.dataset;
+  const embed = buildEmbed(url, thumb, title);
+
+  navigator.clipboard.writeText(embed).then(() => {
+    const textEl = btn.querySelector('.btn-text');
+    const original = textEl.textContent;
+
+    btn.classList.add('stamped');
+    textEl.textContent = 'STAMPED!';
+    playStampSound();
+    spawnClickSparks(event.clientX, event.clientY);
+
+    if (sparkSystem) {
+      const rect = btn.getBoundingClientRect();
+      sparkSystem.spawnBurst(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+        18
+      );
+    }
+
+    setTimeout(() => {
+      btn.classList.remove('stamped');
+      textEl.textContent = original;
+    }, 2200);
+  }).catch(() => {
+    /* fallback for browsers without clipboard API */
+    const ta = document.createElement('textarea');
+    ta.value = buildEmbed(url, thumb, title);
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    btn.classList.add('stamped');
+    btn.querySelector('.btn-text').textContent = 'STAMPED!';
+    playStampSound();
+    spawnClickSparks(event.clientX, event.clientY);
+    setTimeout(() => {
+      btn.classList.remove('stamped');
+      btn.querySelector('.btn-text').textContent = 'COPY EMBED';
+    }, 2200);
+  });
+}
+
+/* ─── Render videos ───────────────────────────────── */
+function renderYearSection(group, isFirst) {
+  const section = document.createElement('section');
+  section.className = 'year-section' + (isFirst ? ' open' : '');
+  section.dataset.year = group.year;
+
+  const header = document.createElement('button');
+  header.className = 'year-header';
+  header.setAttribute('aria-expanded', isFirst ? 'true' : 'false');
+  header.innerHTML = `
+    <span class="year-label">${group.year}</span>
+    <span class="year-count">${group.videos.length} video${group.videos.length !== 1 ? 's' : ''}</span>
+    <span class="year-arrow">&#9660;</span>
+  `;
+
+  const body = document.createElement('div');
+  body.className = 'year-body';
+
+  const grid = document.createElement('div');
+  grid.className = 'video-grid';
+
+  for (const v of group.videos) {
+    const card = document.createElement('article');
+    card.className = 'video-card';
+
+    const thumbHtml = v.thumbnail
+      ? `<img src="${escHtml(v.thumbnail)}" alt="${escHtml(v.title)}" loading="lazy">`
+      : `<div class="no-thumb">&#9654;</div>`;
+
+    card.innerHTML = `
+      <div class="thumb-wrap">
+        ${thumbHtml}
+        <div class="thumb-overlay">
+          <a class="play-link" href="${escHtml(v.url)}" target="_blank" rel="noopener noreferrer">&#9654; VIEW</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <h3 class="video-title">${escHtml(v.title)}</h3>
+        <button class="copy-btn"
+          data-url="${escHtml(v.url)}"
+          data-thumb="${escHtml(v.thumbnail || '')}"
+          data-title="${escHtml(v.title)}">
+          <span class="btn-icon">&#10697;</span>
+          <span class="btn-text">COPY EMBED</span>
+        </button>
+      </div>
+    `;
+
+    grid.appendChild(card);
+  }
+
+  body.appendChild(grid);
+  section.appendChild(header);
+  section.appendChild(body);
+
+  header.addEventListener('click', () => toggleSection(section, header));
+
+  section.addEventListener('click', e => {
+    const btn = e.target.closest('.copy-btn');
+    if (btn) handleCopy(btn, e);
+  });
+
+  return section;
+}
+
+function toggleSection(section, header) {
+  const isOpen = section.classList.contains('open');
+  section.classList.toggle('open', !isOpen);
+  header.setAttribute('aria-expanded', String(!isOpen));
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ─── Load & render ───────────────────────────────── */
+let sparkSystem = null;
+
+async function loadVideos() {
+  show('state-loading');
+  hide('state-error');
+  hide('content');
+
+  try {
+    const resp = await fetch('/api/videos');
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown error');
+
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+
+    if (!json.data || json.data.length === 0) {
+      content.innerHTML = '<p style="text-align:center;color:var(--text-dim);font-family:var(--font-head);font-size:1.4rem;padding:60px 0">No videos found.</p>';
+    } else {
+      json.data.forEach((group, i) => {
+        content.appendChild(renderYearSection(group, i === 0));
+      });
+    }
+
+    hide('state-loading');
+    show('content');
+  } catch (err) {
+    console.error(err);
+    document.getElementById('error-text').textContent = 'Failed to load videos: ' + err.message;
+    hide('state-loading');
+    show('state-error');
+  }
+}
+
+function show(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+
+function hide(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+
+/* ─── Init ────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  const canvas = document.getElementById('bg-canvas');
+  sparkSystem = new SparkSystem(canvas);
+  loadVideos();
+});

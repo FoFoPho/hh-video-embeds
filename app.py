@@ -8,7 +8,7 @@ from flask import Flask, render_template, jsonify, request, session, redirect, u
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "changeme")
+APP_PASSWORDS = [p.strip() for p in os.environ.get("APP_PASSWORD", "changeme").split(",") if p.strip()]
 VIMEO_TOKEN = os.environ.get("VIMEO_TOKEN", "")
 VIMEO_USER = "hammerhaagsteel"
 CACHE_TTL = 3600
@@ -85,7 +85,7 @@ def fetch_videos():
 def login():
     error = None
     if request.method == "POST":
-        if request.form.get("password", "").strip() == APP_PASSWORD.strip():
+        if request.form.get("password", "").strip() in APP_PASSWORDS:
             session["authenticated"] = True
             return redirect(url_for("index"))
         error = "Incorrect password."

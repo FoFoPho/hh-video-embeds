@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hammer Haag — Video Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <canvas id="bg-canvas"></canvas>
+  <div id="sparks-layer"></div>
+
+  <div class="login-wrap">
+    <div class="login-card">
+      <img src="{{ url_for('static', filename='images/hhs-logo-white.png') }}" alt="Hammer Haag Steel" class="login-logo">
+      <h1 class="login-title">Video Library</h1>
+      <p class="login-sub">Access Restricted</p>
+      <div class="login-divider"></div>
+
+      <form class="login-form" method="POST" action="/login">
+        <label class="login-label" for="password">Password</label>
+        <input
+          class="login-input"
+          type="password"
+          id="password"
+          name="password"
+          placeholder="Enter password"
+          autocomplete="current-password"
+          autofocus
+        >
+        {% if error %}
+          <p class="login-error">&#9888; {{ error }}</p>
+        {% endif %}
+        <button class="login-btn" type="submit">Enter</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

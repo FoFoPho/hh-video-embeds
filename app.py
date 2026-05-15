@@ -1,15 +1,28 @@
 import os
 import time
+from functools import wraps
+
 import requests
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "changeme")
 VIMEO_TOKEN = os.environ.get("VIMEO_TOKEN", "")
 VIMEO_USER = "hammerhaagsteel"
 CACHE_TTL = 3600
 
 _cache = {"data": None, "ts": 0}
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
 
 
 def _pick_thumbnail(pictures):
@@ -68,12 +81,31 @@ def fetch_videos():
     return result
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        if request.form.get("password") == APP_PASSWORD:
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        error = "Incorrect password."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/videos")
+@login_required
 def api_videos():
     try:
         data = fetch_videos()

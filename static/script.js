@@ -334,9 +334,48 @@ function hide(id) {
   if (el) el.classList.add('hidden');
 }
 
+/* ─── Re-sync ─────────────────────────────────────── */
+async function syncVideos() {
+  const btn = document.getElementById('sync-btn');
+  btn.disabled = true;
+  btn.classList.add('syncing');
+  btn.querySelector('.sync-text').textContent = 'SYNCING…';
+
+  try {
+    const resp = await fetch('/api/sync', { method: 'POST' });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Sync failed');
+
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+    if (!json.data || json.data.length === 0) {
+      content.innerHTML = '<p style="text-align:center;color:var(--text-dim);font-family:var(--font-head);font-size:1.4rem;padding:60px 0">No videos found.</p>';
+    } else {
+      json.data.forEach((group, i) => content.appendChild(renderYearSection(group, i === 0)));
+    }
+
+    btn.classList.remove('syncing');
+    btn.classList.add('synced');
+    btn.querySelector('.sync-text').textContent = 'SYNCED!';
+    setTimeout(() => {
+      btn.classList.remove('synced');
+      btn.querySelector('.sync-text').textContent = 'RE-SYNC';
+      btn.disabled = false;
+    }, 2000);
+  } catch (err) {
+    btn.classList.remove('syncing');
+    btn.querySelector('.sync-text').textContent = 'FAILED';
+    setTimeout(() => {
+      btn.querySelector('.sync-text').textContent = 'RE-SYNC';
+      btn.disabled = false;
+    }, 2000);
+  }
+}
+
 /* ─── Init ────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('bg-canvas');
   sparkSystem = new SparkSystem(canvas);
   loadVideos();
+  document.getElementById('sync-btn').addEventListener('click', syncVideos);
 });

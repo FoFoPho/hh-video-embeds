@@ -114,6 +114,17 @@ def api_videos():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/sync", methods=["POST"])
+@login_required
+def api_sync():
+    try:
+        _cache["ts"] = 0
+        data = fetch_videos()
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

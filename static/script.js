@@ -226,6 +226,176 @@ function handleCopy(btn, event) {
   }
 }
 
+/* ─── Notes / Change Requests ────────────────────── */
+function relativeTime(ts) {
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function updateNotesBtnState(btn, openCount) {
+  btn.classList.toggle('pending', openCount > 0);
+  btn.classList.toggle('clear', openCount === 0);
+  btn.querySelector('.notes-text').textContent = openCount > 0 ? 'CHANGES REQUESTED' : 'REQUEST CHANGES';
+  let badge = btn.querySelector('.notes-badge');
+  if (openCount > 0) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'notes-badge';
+      btn.appendChild(badge);
+    }
+    badge.textContent = openCount;
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+function buildNoteItem(c) {
+  const item = document.createElement('div');
+  item.className = 'note-item' + (c.done ? ' done' : '');
+  item.dataset.id = c.id;
+  const who = c.author ? escHtml(c.author) : 'Anonymous';
+  item.innerHTML = `
+    <div class="note-meta">${who} &middot; ${relativeTime(c.ts)}</div>
+    <div class="note-text">${escHtml(c.text)}</div>
+    <div class="note-actions">
+      <button class="note-done-btn">${c.done ? '&#8617; REOPEN' : '&#10003; DONE'}</button>
+      <button class="note-delete-btn">&#10005;</button>
+    </div>
+  `;
+  return item;
+}
+
+function renderComments(listEl, comments) {
+  listEl.innerHTML = '';
+  const open = comments.filter(c => !c.done);
+  const done = comments.filter(c => c.done);
+
+  if (open.length === 0 && done.length === 0) {
+    listEl.innerHTML = '<p class="notes-empty">No notes yet.</p>';
+    return;
+  }
+
+  open.forEach(c => listEl.appendChild(buildNoteItem(c)));
+
+  if (done.length > 0) {
+    const toggle = document.createElement('button');
+    toggle.className = 'resolved-toggle';
+    toggle.dataset.expanded = '0';
+    toggle.textContent = `Show resolved (${done.length})`;
+    listEl.appendChild(toggle);
+
+    const resolvedGroup = document.createElement('div');
+    resolvedGroup.className = 'resolved-group';
+    resolvedGroup.hidden = true;
+    done.forEach(c => resolvedGroup.appendChild(buildNoteItem(c)));
+    listEl.appendChild(resolvedGroup);
+  }
+}
+
+async function toggleNotes(btn) {
+  const panel = btn.nextElementSibling;
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+
+  if (!isOpen && !panel.dataset.loaded) {
+    const url = btn.dataset.url;
+    try {
+      const resp = await fetch(`/api/comments?url=${encodeURIComponent(url)}`);
+      const json = await resp.json();
+      if (json.ok) {
+        renderComments(panel.querySelector('.notes-list'), json.comments);
+        panel.dataset.loaded = '1';
+      }
+    } catch (e) {}
+  }
+}
+
+async function toggleNoteDone(doneBtn) {
+  const item = doneBtn.closest('.note-item');
+  const id = item.dataset.id;
+  const panel = doneBtn.closest('.notes-panel');
+  const notesBtn = panel.previousElementSibling;
+  const url = notesBtn.dataset.url;
+
+  try {
+    await fetch(`/api/comments/${id}`, { method: 'PATCH' });
+    const resp = await fetch(`/api/comments?url=${encodeURIComponent(url)}`);
+    const json = await resp.json();
+    if (json.ok) {
+      renderComments(panel.querySelector('.notes-list'), json.comments);
+      updateNotesBtnState(notesBtn, json.open);
+    }
+  } catch (e) {}
+}
+
+async function deleteNote(deleteBtn) {
+  const item = deleteBtn.closest('.note-item');
+  const id = item.dataset.id;
+  const panel = deleteBtn.closest('.notes-panel');
+  const notesBtn = panel.previousElementSibling;
+  const url = notesBtn.dataset.url;
+
+  try {
+    await fetch(`/api/comments/${id}`, { method: 'DELETE' });
+    const resp = await fetch(`/api/comments?url=${encodeURIComponent(url)}`);
+    const json = await resp.json();
+    if (json.ok) {
+      renderComments(panel.querySelector('.notes-list'), json.comments);
+      updateNotesBtnState(notesBtn, json.open);
+    }
+  } catch (e) {}
+}
+
+function toggleResolved(toggleBtn) {
+  const group = toggleBtn.nextElementSibling;
+  const isExpanded = toggleBtn.dataset.expanded === '1';
+  group.hidden = isExpanded;
+  toggleBtn.dataset.expanded = isExpanded ? '0' : '1';
+  const count = group.querySelectorAll('.note-item').length;
+  toggleBtn.textContent = isExpanded ? `Show resolved (${count})` : 'Hide resolved';
+}
+
+async function addComment(form) {
+  const panel = form.closest('.notes-panel');
+  const notesBtn = panel.previousElementSibling;
+  const url = notesBtn.dataset.url;
+  const textEl = form.querySelector('.notes-input');
+  const text = textEl.value.trim();
+  const author = form.querySelector('.notes-author').value.trim();
+  if (!text) return;
+
+  const submitBtn = form.querySelector('.notes-submit');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'ADDING…';
+
+  try {
+    const resp = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, text, author }),
+    });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error);
+
+    textEl.value = '';
+    const resp2 = await fetch(`/api/comments?url=${encodeURIComponent(url)}`);
+    const json2 = await resp2.json();
+    if (json2.ok) {
+      renderComments(panel.querySelector('.notes-list'), json2.comments);
+      updateNotesBtnState(notesBtn, json2.open);
+      panel.dataset.loaded = '1';
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'ADD NOTE';
+  }
+}
+
 /* ─── Render videos ───────────────────────────────── */
 function renderYearSection(group, isFirst) {
   const section = document.createElement('section');
@@ -256,6 +426,7 @@ function renderYearSection(group, isFirst) {
       : `<div class="no-thumb">&#9654;</div>`;
 
     const copies = v.copies || 0;
+    const openComments = v.open_comments || 0;
     card.innerHTML = `
       <div class="thumb-wrap">
         ${thumbHtml}
@@ -273,6 +444,19 @@ function renderYearSection(group, isFirst) {
           <span class="btn-icon">&#10697;</span>
           <span class="btn-text">COPY EMBED</span>
         </button>
+        <button class="notes-btn ${openComments > 0 ? 'pending' : 'clear'}" data-url="${escHtml(v.url)}">
+          <span class="notes-icon">&#9998;</span>
+          <span class="notes-text">${openComments > 0 ? 'CHANGES REQUESTED' : 'REQUEST CHANGES'}</span>
+          ${openComments > 0 ? `<span class="notes-badge">${openComments}</span>` : ''}
+        </button>
+        <div class="notes-panel">
+          <div class="notes-list"></div>
+          <form class="notes-form">
+            <input class="notes-author" type="text" placeholder="Your name (optional)" maxlength="40" autocomplete="off">
+            <textarea class="notes-input" placeholder="Add a note…" rows="2" maxlength="500"></textarea>
+            <button type="submit" class="notes-submit">ADD NOTE</button>
+          </form>
+        </div>
       </div>
     `;
 
@@ -286,8 +470,25 @@ function renderYearSection(group, isFirst) {
   header.addEventListener('click', () => toggleSection(section, header));
 
   section.addEventListener('click', e => {
-    const btn = e.target.closest('.copy-btn');
-    if (btn) handleCopy(btn, e);
+    const copyBtn = e.target.closest('.copy-btn');
+    if (copyBtn) { handleCopy(copyBtn, e); return; }
+
+    const notesBtn = e.target.closest('.notes-btn');
+    if (notesBtn && !e.target.closest('.notes-panel')) { toggleNotes(notesBtn); return; }
+
+    const doneBtn = e.target.closest('.note-done-btn');
+    if (doneBtn) { toggleNoteDone(doneBtn); return; }
+
+    const deleteBtn = e.target.closest('.note-delete-btn');
+    if (deleteBtn) { deleteNote(deleteBtn); return; }
+
+    const resolvedToggle = e.target.closest('.resolved-toggle');
+    if (resolvedToggle) { toggleResolved(resolvedToggle); return; }
+  });
+
+  section.addEventListener('submit', e => {
+    const form = e.target.closest('.notes-form');
+    if (form) { e.preventDefault(); addComment(form); }
   });
 
   return section;

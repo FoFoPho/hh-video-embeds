@@ -34,6 +34,24 @@ def _save_counts():
 
 _counts = _load_counts()
 
+COMMENTS_FILE = os.path.join(os.path.dirname(__file__), "comments.json")
+
+
+def _load_comments():
+    try:
+        with open(COMMENTS_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _save_comments():
+    with open(COMMENTS_FILE, "w") as f:
+        json.dump(_comments, f)
+
+
+_comments = _load_comments()
+
 
 def login_required(f):
     @wraps(f)
@@ -83,6 +101,7 @@ def fetch_videos():
                 "thumbnail": _pick_thumbnail(v.get("pictures")),
                 "year": v.get("created_time", "0000")[:4],
                 "copies": _counts.get(vurl, 0),
+                "open_comments": sum(1 for c in _comments.get(vurl, []) if not c["done"]),
             })
         nxt = body.get("paging", {}).get("next")
         url = f"https://api.vimeo.com{nxt}" if nxt else None
@@ -160,6 +179,60 @@ def api_copy():
                         v["copies"] = _counts[url]
     total = sum(_counts.values())
     return jsonify({"ok": True, "copies": _counts.get(url, 0), "total": total})
+
+
+@app.route("/api/comments", methods=["GET", "POST"])
+@login_required
+def api_comments():
+    if request.method == "GET":
+        url = request.args.get("url", "")
+        comments = _comments.get(url, [])
+        open_count = sum(1 for c in comments if not c["done"])
+        return jsonify({"ok": True, "comments": comments, "open": open_count})
+
+    data = request.json or {}
+    url = data.get("url", "")
+    text = data.get("text", "").strip()
+    if not url or not text:
+        return jsonify({"ok": False, "error": "url and text required"}), 400
+    comment = {
+        "id": os.urandom(4).hex(),
+        "text": text,
+        "author": data.get("author", "").strip(),
+        "ts": int(time.time()),
+        "done": False,
+    }
+    _comments.setdefault(url, []).append(comment)
+    _save_comments()
+    if _cache["data"]:
+        for group in _cache["data"]:
+            for v in group["videos"]:
+                if v["url"] == url:
+                    v["open_comments"] = sum(1 for c in _comments[url] if not c["done"])
+    open_count = sum(1 for c in _comments[url] if not c["done"])
+    return jsonify({"ok": True, "comment": comment, "open": open_count})
+
+
+@app.route("/api/comments/<cid>", methods=["PATCH", "DELETE"])
+@login_required
+def api_comment(cid):
+    for url, comments in _comments.items():
+        for i, c in enumerate(comments):
+            if c["id"] != cid:
+                continue
+            if request.method == "DELETE":
+                comments.pop(i)
+            else:
+                c["done"] = not c["done"]
+            _save_comments()
+            if _cache["data"]:
+                for group in _cache["data"]:
+                    for v in group["videos"]:
+                        if v["url"] == url:
+                            v["open_comments"] = sum(1 for x in comments if not x["done"])
+            open_count = sum(1 for x in comments if not x["done"])
+            return jsonify({"ok": True, "open": open_count})
+    return jsonify({"ok": False, "error": "not found"}), 404
 
 
 if __name__ == "__main__":

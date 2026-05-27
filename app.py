@@ -16,7 +16,10 @@ CACHE_TTL = 3600
 
 _cache = {"data": None, "ts": 0}
 
-COUNTS_FILE = os.path.join(os.path.dirname(__file__), "counts.json")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+os.makedirs(DATA_DIR, exist_ok=True)
+
+COUNTS_FILE = os.path.join(DATA_DIR, "counts.json")
 
 
 def _load_counts():
@@ -34,7 +37,7 @@ def _save_counts():
 
 _counts = _load_counts()
 
-COMMENTS_FILE = os.path.join(os.path.dirname(__file__), "comments.json")
+COMMENTS_FILE = os.path.join(DATA_DIR, "comments.json")
 
 
 def _load_comments():

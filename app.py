@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from functools import wraps
@@ -14,6 +15,24 @@ VIMEO_USER = "hammerhaagsteel"
 CACHE_TTL = 3600
 
 _cache = {"data": None, "ts": 0}
+
+COUNTS_FILE = os.path.join(os.path.dirname(__file__), "counts.json")
+
+
+def _load_counts():
+    try:
+        with open(COUNTS_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _save_counts():
+    with open(COUNTS_FILE, "w") as f:
+        json.dump(_counts, f)
+
+
+_counts = _load_counts()
 
 
 def login_required(f):
@@ -57,11 +76,13 @@ def fetch_videos():
         resp.raise_for_status()
         body = resp.json()
         for v in body.get("data", []):
+            vurl = v.get("link", "")
             videos.append({
                 "title": v.get("name", "Untitled"),
-                "url": v.get("link", ""),
+                "url": vurl,
                 "thumbnail": _pick_thumbnail(v.get("pictures")),
                 "year": v.get("created_time", "0000")[:4],
+                "copies": _counts.get(vurl, 0),
             })
         nxt = body.get("paging", {}).get("next")
         url = f"https://api.vimeo.com{nxt}" if nxt else None
@@ -109,7 +130,7 @@ def index():
 def api_videos():
     try:
         data = fetch_videos()
-        return jsonify({"ok": True, "data": data})
+        return jsonify({"ok": True, "data": data, "total": sum(_counts.values())})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -120,9 +141,25 @@ def api_sync():
     try:
         _cache["ts"] = 0
         data = fetch_videos()
-        return jsonify({"ok": True, "data": data})
+        return jsonify({"ok": True, "data": data, "total": sum(_counts.values())})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/copy", methods=["POST"])
+@login_required
+def api_copy():
+    url = request.json.get("url", "") if request.is_json else ""
+    if url:
+        _counts[url] = _counts.get(url, 0) + 1
+        _save_counts()
+        if _cache["data"]:
+            for group in _cache["data"]:
+                for v in group["videos"]:
+                    if v["url"] == url:
+                        v["copies"] = _counts[url]
+    total = sum(_counts.values())
+    return jsonify({"ok": True, "copies": _counts.get(url, 0), "total": total})
 
 
 if __name__ == "__main__":

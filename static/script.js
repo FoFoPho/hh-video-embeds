@@ -179,6 +179,19 @@ function stampFeedback(btn, event) {
   }, 2200);
 }
 
+function recordCopy(btn) {
+  fetch('/api/copy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: btn.dataset.url }),
+  }).then(r => r.json()).then(json => {
+    if (!json.ok) return;
+    const countEl = btn.closest('.card-body').querySelector('.copy-count');
+    if (countEl) countEl.textContent = `${json.copies} cop${json.copies === 1 ? 'y' : 'ies'}`;
+    setTotal(json.total);
+  }).catch(() => {});
+}
+
 function handleCopy(btn, event) {
   const { url, thumb, title } = btn.dataset;
   const html = buildEmbed(url, thumb, title);
@@ -187,7 +200,7 @@ function handleCopy(btn, event) {
   if (navigator.clipboard && window.ClipboardItem) {
     const blob = new Blob([html], { type: 'text/html' });
     navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })])
-      .then(() => stampFeedback(btn, event))
+      .then(() => { stampFeedback(btn, event); recordCopy(btn); })
       .catch(() => {
         /* fallback for browsers without clipboard API */
         const ta = document.createElement('textarea');
@@ -198,6 +211,7 @@ function handleCopy(btn, event) {
         document.execCommand('copy');
         ta.remove();
         stampFeedback(btn, event);
+        recordCopy(btn);
       });
   } else {
     const ta = document.createElement('textarea');
@@ -208,6 +222,7 @@ function handleCopy(btn, event) {
     document.execCommand('copy');
     ta.remove();
     stampFeedback(btn, event);
+    recordCopy(btn);
   }
 }
 
@@ -240,6 +255,7 @@ function renderYearSection(group, isFirst) {
       ? `<img src="${escHtml(v.thumbnail)}" alt="${escHtml(v.title)}" loading="lazy">`
       : `<div class="no-thumb">&#9654;</div>`;
 
+    const copies = v.copies || 0;
     card.innerHTML = `
       <div class="thumb-wrap">
         ${thumbHtml}
@@ -249,6 +265,7 @@ function renderYearSection(group, isFirst) {
       </div>
       <div class="card-body">
         <h3 class="video-title">${escHtml(v.title)}</h3>
+        <span class="copy-count">${copies} cop${copies === 1 ? 'y' : 'ies'}</span>
         <button class="copy-btn"
           data-url="${escHtml(v.url)}"
           data-thumb="${escHtml(v.thumbnail || '')}"
@@ -293,6 +310,11 @@ function escHtml(str) {
 /* ─── Load & render ───────────────────────────────── */
 let sparkSystem = null;
 
+function setTotal(n) {
+  const el = document.getElementById('total-copies');
+  if (el) el.textContent = n;
+}
+
 async function loadVideos() {
   show('state-loading');
   hide('state-error');
@@ -314,6 +336,7 @@ async function loadVideos() {
       });
     }
 
+    setTotal(json.total ?? 0);
     hide('state-loading');
     show('content');
   } catch (err) {
@@ -354,6 +377,7 @@ async function syncVideos() {
       json.data.forEach((group, i) => content.appendChild(renderYearSection(group, i === 0)));
     }
 
+    setTotal(json.total ?? 0);
     btn.classList.remove('syncing');
     btn.classList.add('synced');
     btn.querySelector('.sync-text').textContent = 'SYNCED!';

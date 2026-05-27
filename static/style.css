@@ -481,9 +481,44 @@ body {
   .video-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
 }
 
+/* ─── Header total ───────────────────────────────────── */
+.header-total {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+
+.header-total-num {
+  font-family: var(--font-head);
+  font-size: 1.8rem;
+  color: var(--orange);
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 10px var(--orange-glow);
+}
+
+.header-total-label {
+  font-family: var(--font-body);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ─── Copy count (per card) ──────────────────────────── */
+.copy-count {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
 /* ─── Sync button ────────────────────────────────────── */
 .sync-btn {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;

@@ -491,6 +491,13 @@ function renderYearSection(group, isFirst) {
     if (form) { e.preventDefault(); addComment(form); }
   });
 
+  section.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && e.target.closest('.notes-input')) {
+      e.preventDefault();
+      e.target.closest('.notes-form').requestSubmit();
+    }
+  });
+
   return section;
 }
 

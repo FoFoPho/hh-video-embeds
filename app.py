@@ -77,7 +77,9 @@ def send_notification(subject, body_text, body_html=None):
             msg.attach(MIMEText(body_text, "plain"))
             if body_html:
                 msg.attach(MIMEText(body_html, "html"))
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
                 server.login(smtp_user, smtp_pass)
                 server.sendmail(smtp_user, notify_to, msg.as_string())
         except Exception:
@@ -322,6 +324,15 @@ def api_comment(cid):
     return jsonify({"ok": False, "error": "not found"}), 404
 
 
+@app.route("/api/notify-check")
+def api_notify_check():
+    return jsonify({
+        "NOTIFY_GMAIL_USER": bool(os.environ.get("NOTIFY_GMAIL_USER")),
+        "NOTIFY_GMAIL_APP_PASSWORD": bool(os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")),
+        "NOTIFY_EMAIL": bool(os.environ.get("NOTIFY_EMAIL")),
+    })
+
+
 @app.route("/api/test-notify")
 @login_required
 def api_test_notify():
@@ -338,7 +349,9 @@ def api_test_notify():
         msg["From"] = smtp_user
         msg["To"] = notify_to
         msg.attach(MIMEText("Test email from HH Vimeo Library. Notifications are working.", "plain"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
             server.login(smtp_user, smtp_pass)
             server.sendmail(smtp_user, notify_to, msg.as_string())
         return jsonify({"ok": True, "message": f"Test email sent to {notify_to}"})

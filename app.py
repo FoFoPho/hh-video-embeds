@@ -1,11 +1,8 @@
 import html
 import json
 import os
-import smtplib
 import threading
 import time
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from functools import wraps
 
 import requests
@@ -62,26 +59,28 @@ _comments = _load_comments()
 
 
 def send_notification(subject, body_text, body_html=None):
-    smtp_user = os.environ.get("NOTIFY_GMAIL_USER")
-    smtp_pass = os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")
+    api_key = os.environ.get("SENDGRID_API_KEY")
+    from_email = os.environ.get("SENDGRID_FROM")
     notify_to = os.environ.get("NOTIFY_EMAIL")
-    if not (smtp_user and smtp_pass and notify_to):
+    if not (api_key and from_email and notify_to):
         return
 
     def _send():
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = smtp_user
-            msg["To"] = notify_to
-            msg.attach(MIMEText(body_text, "plain"))
+            content = [{"type": "text/plain", "value": body_text}]
             if body_html:
-                msg.attach(MIMEText(body_html, "html"))
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-                server.ehlo()
-                server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(smtp_user, notify_to, msg.as_string())
+                content.append({"type": "text/html", "value": body_html})
+            requests.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "personalizations": [{"to": [{"email": notify_to}]}],
+                    "from": {"email": from_email},
+                    "subject": subject,
+                    "content": content,
+                },
+                timeout=15,
+            )
         except Exception:
             pass
 
@@ -327,8 +326,8 @@ def api_comment(cid):
 @app.route("/api/notify-check")
 def api_notify_check():
     return jsonify({
-        "NOTIFY_GMAIL_USER": bool(os.environ.get("NOTIFY_GMAIL_USER")),
-        "NOTIFY_GMAIL_APP_PASSWORD": bool(os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")),
+        "SENDGRID_API_KEY": bool(os.environ.get("SENDGRID_API_KEY")),
+        "SENDGRID_FROM": bool(os.environ.get("SENDGRID_FROM")),
         "NOTIFY_EMAIL": bool(os.environ.get("NOTIFY_EMAIL")),
     })
 
@@ -338,23 +337,26 @@ def api_notify_check():
 def api_test_notify():
     import traceback
     try:
-        smtp_user = os.environ.get("NOTIFY_GMAIL_USER")
-        smtp_pass = os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")
+        api_key = os.environ.get("SENDGRID_API_KEY")
+        from_email = os.environ.get("SENDGRID_FROM")
         notify_to = os.environ.get("NOTIFY_EMAIL")
-        missing = [k for k, v in [("NOTIFY_GMAIL_USER", smtp_user), ("NOTIFY_GMAIL_APP_PASSWORD", smtp_pass), ("NOTIFY_EMAIL", notify_to)] if not v]
+        missing = [k for k, v in [("SENDGRID_API_KEY", api_key), ("SENDGRID_FROM", from_email), ("NOTIFY_EMAIL", notify_to)] if not v]
         if missing:
             return jsonify({"ok": False, "error": f"Missing env vars: {', '.join(missing)}"})
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "HH Vimeo Library - test notification"
-        msg["From"] = smtp_user
-        msg["To"] = notify_to
-        msg.attach(MIMEText("Test email from HH Vimeo Library. Notifications are working.", "plain"))
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, notify_to, msg.as_string())
-        return jsonify({"ok": True, "message": f"Test email sent to {notify_to}"})
+        resp = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "personalizations": [{"to": [{"email": notify_to}]}],
+                "from": {"email": from_email},
+                "subject": "HH Vimeo Library - test notification",
+                "content": [{"type": "text/plain", "value": "Test email from HH Vimeo Library. Notifications are working."}],
+            },
+            timeout=15,
+        )
+        if resp.status_code in (200, 202):
+            return jsonify({"ok": True, "message": f"Test email sent to {notify_to}"})
+        return jsonify({"ok": False, "error": f"SendGrid returned {resp.status_code}", "body": resp.text})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()})
 

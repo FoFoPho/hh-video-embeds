@@ -1,6 +1,11 @@
+import html
 import json
 import os
+import smtplib
+import threading
 import time
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from functools import wraps
 
 import requests
@@ -54,6 +59,31 @@ def _save_comments():
 
 
 _comments = _load_comments()
+
+
+def send_notification(subject, body_text, body_html=None):
+    smtp_user = os.environ.get("NOTIFY_GMAIL_USER")
+    smtp_pass = os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")
+    notify_to = os.environ.get("NOTIFY_EMAIL")
+    if not (smtp_user and smtp_pass and notify_to):
+        return
+
+    def _send():
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = smtp_user
+            msg["To"] = notify_to
+            msg.attach(MIMEText(body_text, "plain"))
+            if body_html:
+                msg.attach(MIMEText(body_html, "html"))
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_user, notify_to, msg.as_string())
+        except Exception:
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def login_required(f):
@@ -213,6 +243,31 @@ def api_comments():
                 if v["url"] == url:
                     v["open_comments"] = sum(1 for c in _comments[url] if not c["done"])
     open_count = sum(1 for c in _comments[url] if not c["done"])
+
+    author = comment["author"]
+    video_name = url
+    if _cache["data"]:
+        for group in _cache["data"]:
+            for v in group["videos"]:
+                if v["url"] == url:
+                    video_name = v["title"]
+                    break
+    send_notification(
+        subject=f"New change request: {video_name}",
+        body_text=(
+            f"A new change request was added.\n\n"
+            f"Video: {url}\n\n"
+            f"From: {author or 'Anonymous'}\n\n"
+            f"{text}"
+        ),
+        body_html=(
+            f"<p><strong>New change request</strong></p>"
+            f"<p><strong>Video:</strong> <a href='{html.escape(url)}'>{html.escape(video_name)}</a></p>"
+            f"<p><strong>From:</strong> {html.escape(author or 'Anonymous')}</p>"
+            f"<blockquote>{html.escape(text)}</blockquote>"
+        ),
+    )
+
     return jsonify({"ok": True, "comment": comment, "open": open_count})
 
 
@@ -223,10 +278,13 @@ def api_comment(cid):
         for i, c in enumerate(comments):
             if c["id"] != cid:
                 continue
+            just_resolved = False
             if request.method == "DELETE":
                 comments.pop(i)
             else:
+                was_done = c["done"]
                 c["done"] = not c["done"]
+                just_resolved = c["done"] and not was_done
             _save_comments()
             if _cache["data"]:
                 for group in _cache["data"]:
@@ -234,8 +292,57 @@ def api_comment(cid):
                         if v["url"] == url:
                             v["open_comments"] = sum(1 for x in comments if not x["done"])
             open_count = sum(1 for x in comments if not x["done"])
+
+            if just_resolved:
+                video_name = url
+                if _cache["data"]:
+                    for group in _cache["data"]:
+                        for v in group["videos"]:
+                            if v["url"] == url:
+                                video_name = v["title"]
+                                break
+                send_notification(
+                    subject=f"Change request resolved: {video_name}",
+                    body_text=(
+                        f"A change request was marked as resolved.\n\n"
+                        f"Video: {url}\n\n"
+                        f"Comment: {c['text']}\n"
+                        f"By: {c.get('author') or 'Anonymous'}"
+                    ),
+                    body_html=(
+                        f"<p><strong>Change request resolved</strong></p>"
+                        f"<p><strong>Video:</strong> <a href='{html.escape(url)}'>{html.escape(video_name)}</a></p>"
+                        f"<p><strong>Comment:</strong></p>"
+                        f"<blockquote>{html.escape(c['text'])}</blockquote>"
+                        f"<p><em>By {html.escape(c.get('author') or 'Anonymous')}</em></p>"
+                    ),
+                )
+
             return jsonify({"ok": True, "open": open_count})
     return jsonify({"ok": False, "error": "not found"}), 404
+
+
+@app.route("/api/test-notify", methods=["GET", "POST"])
+@login_required
+def api_test_notify():
+    smtp_user = os.environ.get("NOTIFY_GMAIL_USER")
+    smtp_pass = os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")
+    notify_to = os.environ.get("NOTIFY_EMAIL")
+    missing = [k for k, v in [("NOTIFY_GMAIL_USER", smtp_user), ("NOTIFY_GMAIL_APP_PASSWORD", smtp_pass), ("NOTIFY_EMAIL", notify_to)] if not v]
+    if missing:
+        return jsonify({"ok": False, "error": f"Missing env vars: {', '.join(missing)}"}), 500
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "HH Vimeo Library — test notification"
+        msg["From"] = smtp_user
+        msg["To"] = notify_to
+        msg.attach(MIMEText("Test email from HH Vimeo Library. Notifications are working.", "plain"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, notify_to, msg.as_string())
+        return jsonify({"ok": True, "message": f"Test email sent to {notify_to}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

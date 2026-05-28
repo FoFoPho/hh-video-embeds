@@ -233,6 +233,7 @@ def api_comments():
         "id": os.urandom(4).hex(),
         "text": text,
         "author": data.get("author", "").strip(),
+        "timecode": data.get("timecode", "").strip(),
         "ts": int(time.time()),
         "done": False,
     }
@@ -246,6 +247,7 @@ def api_comments():
     open_count = sum(1 for c in _comments[url] if not c["done"])
 
     author = comment["author"]
+    timecode = comment["timecode"]
     video_name = url
     if _cache["data"]:
         for group in _cache["data"]:
@@ -253,18 +255,22 @@ def api_comments():
                 if v["url"] == url:
                     video_name = v["title"]
                     break
+    tc_text = f"Timecode: {timecode}\n" if timecode else ""
+    tc_html = f"<p><strong>Timecode:</strong> {html.escape(timecode)}</p>" if timecode else ""
     send_notification(
         subject=f"New change request: {video_name}",
         body_text=(
             f"A new change request was added.\n\n"
             f"Video: {url}\n\n"
-            f"From: {author or 'Anonymous'}\n\n"
+            f"From: {author or 'Anonymous'}\n"
+            f"{tc_text}\n"
             f"{text}"
         ),
         body_html=(
             f"<p><strong>New change request</strong></p>"
             f"<p><strong>Video:</strong> <a href='{html.escape(url)}'>{html.escape(video_name)}</a></p>"
             f"<p><strong>From:</strong> {html.escape(author or 'Anonymous')}</p>"
+            f"{tc_html}"
             f"<blockquote>{html.escape(text)}</blockquote>"
         ),
     )

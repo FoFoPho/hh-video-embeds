@@ -737,6 +737,7 @@ body {
 }
 
 .notes-author,
+.notes-timecode,
 .notes-input {
   width: 100%;
   background: var(--card);
@@ -751,17 +752,30 @@ body {
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
-.notes-author { padding: 7px 10px; }
-.notes-input  { padding: 8px 10px; line-height: 1.4; }
+.notes-author   { padding: 7px 10px; }
+.notes-timecode { padding: 7px 10px; }
+.notes-input    { padding: 8px 10px; line-height: 1.4; }
 
 .notes-author:focus,
+.notes-timecode:focus,
 .notes-input:focus {
   border-color: var(--orange);
   box-shadow: 0 0 0 2px var(--orange-glow);
 }
 
 .notes-author::placeholder,
+.notes-timecode::placeholder,
 .notes-input::placeholder { color: var(--steel-light); }
+
+.note-timecode {
+  background: rgba(255, 85, 0, 0.12);
+  color: var(--orange);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.75em;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
 
 .notes-submit {
   font-family: var(--font-head);

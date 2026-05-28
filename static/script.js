@@ -257,8 +257,9 @@ function buildNoteItem(c) {
   item.className = 'note-item' + (c.done ? ' done' : '');
   item.dataset.id = c.id;
   const who = c.author ? escHtml(c.author) : 'Anonymous';
+  const tc = c.timecode ? `<span class="note-timecode">@ ${escHtml(c.timecode)}</span>` : '';
   item.innerHTML = `
-    <div class="note-meta">${who} &middot; ${relativeTime(c.ts)}</div>
+    <div class="note-meta">${who}${tc ? ' &middot; ' + tc : ''} &middot; ${relativeTime(c.ts)}</div>
     <div class="note-text">${escHtml(c.text)}</div>
     <div class="note-actions">
       <button class="note-done-btn">${c.done ? '&#8617; REOPEN' : '&#10003; DONE'}</button>
@@ -365,6 +366,7 @@ async function addComment(form) {
   const textEl = form.querySelector('.notes-input');
   const text = textEl.value.trim();
   const author = form.querySelector('.notes-author').value.trim();
+  const timecode = form.querySelector('.notes-timecode').value.trim();
   if (!text) return;
 
   const submitBtn = form.querySelector('.notes-submit');
@@ -375,7 +377,7 @@ async function addComment(form) {
     const resp = await fetch('/api/comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, text, author }),
+      body: JSON.stringify({ url, text, author, timecode }),
     });
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error);
@@ -453,6 +455,7 @@ function renderYearSection(group, isFirst) {
           <div class="notes-list"></div>
           <form class="notes-form">
             <input class="notes-author" type="text" placeholder="Your name (optional)" maxlength="40" autocomplete="off">
+            <input class="notes-timecode" type="text" placeholder="Timecode (e.g. 1:23)" maxlength="20" autocomplete="off">
             <textarea class="notes-input" placeholder="Add a note…" rows="2" maxlength="500"></textarea>
             <button type="submit" class="notes-submit">ADD NOTE</button>
           </form>

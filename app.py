@@ -322,18 +322,19 @@ def api_comment(cid):
     return jsonify({"ok": False, "error": "not found"}), 404
 
 
-@app.route("/api/test-notify", methods=["GET", "POST"])
+@app.route("/api/test-notify")
 @login_required
 def api_test_notify():
-    smtp_user = os.environ.get("NOTIFY_GMAIL_USER")
-    smtp_pass = os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")
-    notify_to = os.environ.get("NOTIFY_EMAIL")
-    missing = [k for k, v in [("NOTIFY_GMAIL_USER", smtp_user), ("NOTIFY_GMAIL_APP_PASSWORD", smtp_pass), ("NOTIFY_EMAIL", notify_to)] if not v]
-    if missing:
-        return jsonify({"ok": False, "error": f"Missing env vars: {', '.join(missing)}"}), 500
+    import traceback
     try:
+        smtp_user = os.environ.get("NOTIFY_GMAIL_USER")
+        smtp_pass = os.environ.get("NOTIFY_GMAIL_APP_PASSWORD")
+        notify_to = os.environ.get("NOTIFY_EMAIL")
+        missing = [k for k, v in [("NOTIFY_GMAIL_USER", smtp_user), ("NOTIFY_GMAIL_APP_PASSWORD", smtp_pass), ("NOTIFY_EMAIL", notify_to)] if not v]
+        if missing:
+            return jsonify({"ok": False, "error": f"Missing env vars: {', '.join(missing)}"})
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "HH Vimeo Library — test notification"
+        msg["Subject"] = "HH Vimeo Library - test notification"
         msg["From"] = smtp_user
         msg["To"] = notify_to
         msg.attach(MIMEText("Test email from HH Vimeo Library. Notifications are working.", "plain"))
@@ -342,7 +343,7 @@ def api_test_notify():
             server.sendmail(smtp_user, notify_to, msg.as_string())
         return jsonify({"ok": True, "message": f"Test email sent to {notify_to}"})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()})
 
 
 if __name__ == "__main__":
